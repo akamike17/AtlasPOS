@@ -134,7 +134,7 @@ public sealed class MySqlIntegrationTests(MySqlFixture fixture)
     public async Task ConcurrentReturnsNeverExceedSoldQuantity()
     {
         fixture.RequireEnabled();
-        var productId = fixture.ProductId("TEST-RETURN");
+        var productId = await fixture.AddProductAsync($"TEST-PARTIAL-{Guid.NewGuid():N}", 3);
         var sale = await fixture.RunCheckoutAsync(fixture.Sale("mysql-return-sale", productId, 1, 20), "terminal-return-sale");
         Assert.True(sale.Success, sale.Error);
         var saleLineId = sale.LineId;
@@ -150,6 +150,111 @@ public sealed class MySqlIntegrationTests(MySqlFixture fixture)
         Assert.Equal(1, results.Count(x => x.Success));
         await using var db = fixture.CreateContext();
         Assert.Equal(1m, await db.SaleReturnLines.Where(x => x.SaleLineId == saleLineId).SumAsync(x => x.Quantity));
+    }
+
+    [Fact]
+    public async Task InvalidCheckoutAndPurchaseInputsDoNotMutateData()
+    {
+        fixture.RequireEnabled();
+        var productId = fixture.ProductId("TEST-IDEM");
+        await using var before = fixture.CreateContext();
+        var stock = await before.Products.Where(x => x.Id == productId).Select(x => x.Stock).SingleAsync();
+        var sales = await before.Sales.CountAsync(x => x.ClientOperationId == "mysql-invalid-sale");
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => fixture.CreateService(before, 1, "terminal-idem")
+            .CheckoutAsync(fixture.Sale("mysql-invalid-sale", productId, 1, 0), default));
+
+        await using var afterCheckout = fixture.CreateContext();
+        Assert.Equal(stock, await afterCheckout.Products.Where(x => x.Id == productId).Select(x => x.Stock).SingleAsync());
+        Assert.Equal(sales, await afterCheckout.Sales.CountAsync(x => x.ClientOperationId == "mysql-invalid-sale"));
+
+        var request = new PurchaseRequest
+        {
+            SupplierId = 1,
+            Reference = "mysql-invalid-purchase",
+            Lines = [new() { ProductId = productId, Quantity = 0, UnitCost = 4 }]
+        };
+        await using var purchaseDb = fixture.CreateContext();
+        await Assert.ThrowsAsync<InvalidOperationException>(() => fixture.CreateService(purchaseDb, 1, "terminal-purchase")
+            .ReceivePurchaseAsync(request, default));
+
+        await using var afterPurchase = fixture.CreateContext();
+        Assert.Equal(stock, await afterPurchase.Products.Where(x => x.Id == productId).Select(x => x.Stock).SingleAsync());
+        Assert.False(await afterPurchase.Purchases.AnyAsync(x => x.Folio == request.Reference));
+        Assert.False(await afterPurchase.InventoryMovements.AnyAsync(x => x.Note == request.Reference));
+    }
+
+    [Fact]
+    public async Task PartialReturnsRespectRemainingQuantityAndRestock()
+    {
+        fixture.RequireEnabled();
+        var productId = fixture.ProductId("TEST-RETURN");
+        var sale = await fixture.RunCheckoutAsync(fixture.Sale("mysql-partial-return-sale", productId, 1, 20), "terminal-return-sale");
+        Assert.True(sale.Success, sale.Error);
+
+        await using var returnDb = fixture.CreateContext();
+        var service = fixture.CreateService(returnDb, 1, "terminal-return-a");
+        var first = await service.ReturnSaleAsync(new ReturnRequest
+        {
+            SaleFolio = sale.Folio!, Reason = "Devolución parcial", Lines = [new() { SaleLineId = sale.LineId, Quantity = .5m, Restock = true }]
+        }, default);
+        Assert.Equal("partially_returned", first.SaleStatus);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => service.ReturnSaleAsync(new ReturnRequest
+        {
+            SaleFolio = sale.Folio!, Reason = "Exceso", Lines = [new() { SaleLineId = sale.LineId, Quantity = .6m, Restock = true }]
+        }, default));
+
+        var remaining = await service.ReturnSaleAsync(new ReturnRequest
+        {
+            SaleFolio = sale.Folio!, Reason = "Devolución restante", Lines = [new() { SaleLineId = sale.LineId, Quantity = .5m, Restock = false }]
+        }, default);
+        Assert.Equal("returned", remaining.SaleStatus);
+
+        await using var db = fixture.CreateContext();
+        Assert.Equal(1m, await db.SaleReturnLines.Where(x => x.SaleLineId == sale.LineId).SumAsync(x => x.Quantity));
+        Assert.Equal(1, await db.InventoryMovements.CountAsync(x => x.Note == first.Folio && x.Kind == "return"));
+        Assert.Contains(await db.AuditLog.Where(x => x.EntityId == sale.Folio).Select(x => x.Action).ToListAsync(), x => x == "sale.returned");
+    }
+
+    [Fact]
+    public async Task CustomerInventoryAndManufacturingFlowsRemainStoreScopedAndAtomic()
+    {
+        fixture.RequireEnabled();
+        await using var db = fixture.CreateContext();
+        var pos = fixture.CreateService(db, 1, "terminal-idem");
+        var customer = await pos.SaveCustomerAsync(new CustomerUpsertRequest
+        {
+            Name = "Cliente de laboratorio", Rfc = "LABA800101AB1", Email = "LAB@EXAMPLE.MX", Phone = "5512345678",
+            LegalName = "CLIENTE DE LABORATORIO", FiscalRegime = "612", FiscalZip = "06000", CfdiUse = "G03"
+        }, default);
+        Assert.Equal("lab@example.mx", customer.Email);
+
+        var raw = new ProductEntity { StoreId = 1, Sku = "RAW-LAB", Name = "Insumo laboratorio", Stock = 5, Active = true };
+        var finished = new ProductEntity { StoreId = 1, Sku = "FIN-LAB", Name = "Producto terminado", Stock = 0, Active = true };
+        db.Products.AddRange(raw, finished);
+        await db.SaveChangesAsync();
+
+        var manufacturing = fixture.CreateManufacturingService(db, 1);
+        var recipe = await manufacturing.SaveRecipeAsync(new SaveRecipeRequest
+        {
+            ProductId = (int)finished.Id, OutputQuantity = 1,
+            Components = [new() { ProductId = (int)raw.Id, Quantity = 2 }]
+        }, default);
+        var produced = await manufacturing.ProduceAsync(new ProduceRequest { RecipeId = recipe.Id, Batches = 2 }, default);
+        Assert.Equal(2m, produced.Produced);
+
+        await using var after = fixture.CreateContext();
+        Assert.Equal(1m, await after.Products.Where(x => x.Id == raw.Id).Select(x => x.Stock).SingleAsync());
+        Assert.Equal(2m, await after.Products.Where(x => x.Id == finished.Id).Select(x => x.Stock).SingleAsync());
+        Assert.Equal(2, await after.InventoryMovements.CountAsync(x => x.Note == produced.Folio));
+        var ordersBeforeFailure = await after.ProductionOrders.CountAsync(x => x.RecipeId == recipe.Id);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => manufacturing.ProduceAsync(new ProduceRequest { RecipeId = recipe.Id, Batches = 2 }, default));
+        await using var final = fixture.CreateContext();
+        Assert.Equal(ordersBeforeFailure, await final.ProductionOrders.CountAsync(x => x.RecipeId == recipe.Id));
+        Assert.Equal(1m, await final.Products.Where(x => x.Id == raw.Id).Select(x => x.Stock).SingleAsync());
+        Assert.Equal(2m, await final.Products.Where(x => x.Id == finished.Id).Select(x => x.Stock).SingleAsync());
     }
 }
 
@@ -207,6 +312,9 @@ public sealed class MySqlFixture : IAsyncLifetime
     public EfPointOfSaleService CreateService(AtlasDbContext db, long storeId, string terminalId)
         => new(db, new TestUserContext(storeId), new TestTerminalContext(terminalId));
 
+    public ManufacturingService CreateManufacturingService(AtlasDbContext db, long storeId)
+        => new(db, new TestUserContext(storeId));
+
     public async Task<CheckoutAttempt> RunCheckoutAsync(SaleRequest request, string terminalId)
     {
         await using var db = CreateContext();
@@ -241,6 +349,15 @@ public sealed class MySqlFixture : IAsyncLifetime
     {
         using var db = CreateContext();
         return (int)db.Products.Single(x => x.Sku == sku).Id;
+    }
+
+    public async Task<int> AddProductAsync(string sku, decimal stock)
+    {
+        await using var db = CreateContext();
+        var product = new ProductEntity { StoreId = 1, Sku = sku, Name = sku, Price = 10, Stock = stock, Active = true };
+        db.Products.Add(product);
+        await db.SaveChangesAsync();
+        return (int)product.Id;
     }
 
     public SaleRequest Sale(string operationId, int productId, decimal quantity, decimal payment)

@@ -1,36 +1,29 @@
 # Evidencia de pruebas
 
-## Ejecutado
+## Comandos ejecutados
 
 ```powershell
 dotnet restore PuntoDeVentaAtlas.Web.slnx -p:NuGetAudit=false --ignore-failed-sources
 dotnet build PuntoDeVentaAtlas.Web.slnx --configuration Release --no-restore
-dotnet test tests\PuntoDeVentaAtlas.Web.Tests\PuntoDeVentaAtlas.Web.Tests.csproj --configuration Release --no-restore
-$env:ATLAS_MYSQL_ADMIN_CONNECTION='...'; dotnet test tests\Integration.MySql\Integration.MySql.csproj --configuration Release --no-restore
+dotnet test PuntoDeVentaAtlas.Web.slnx --configuration Release --no-build
+dotnet build tests\Integration.MySql\Integration.MySql.csproj --configuration Release --no-restore
+dotnet test tests\Integration.MySql\Integration.MySql.csproj --configuration Release --no-build
 ```
 
-Resultado observado en esta sesión: restore correcto; Release verde (0 warnings, 0 errors); 12 tests unitarios correctos y 9 pruebas MySQL correctas.
+Resultado: restore y Release correctos; build sin advertencias; pruebas unitarias verdes; MySQL integrado **12/12**.
 
-## MySQL / runtime verificado
+## Cobertura MySQL
 
-- MySQL80 activo en `127.0.0.1:3306`; conexión EF exitosa a `atlas_pos` con credencial suministrada externamente.
-- `dotnet ef migrations list`: 8 migraciones aplicadas, hasta `20260813220000_AddPartialReturnLines`.
-- App real sin migrar ni sembrar: `GET /health` → 200 `Healthy`.
-- `GET /Auth/Login` → 200.
-- Ruta protegida `GET /Pos/Devices` sin sesión → 302 al login.
-- Integration.MySql sobre bases efímeras: fresh/migraciones, upgrade desde `20260813201012_SnapshotSyncMultiTerminal`, backup/restore a base vacía, idempotencia, venta concurrente de última unidad, devoluciones concurrentes, aislamiento de producto, rollback de compra cross-store y apertura concurrente de turno.
-- Backup operativo Lab: `mysqldump --single-transaction --routines --triggers --hex-blob` correcto; SHA-256 observado `984ADC923B4DDE803A9578E73305EF842EA9B35D025C4EA35088EB72BEB5FDB5`; importación a otra base correcta (25 tablas, 5 productos). Ambas bases y el dump temporal fueron eliminados después de verificar.
-- Browser Lab: login de `admin@atlas.local`, apertura de turno, venta de `TEST-IDEM` por efectivo, corte esperado/contado `$10.00` y cierre auditado. Consola sin errores/advertencias.
+Las pruebas crean y eliminan bases efímeras con MySQL local, sin tocar `atlas_pos`. Cubren migración fresh, upgrade desde `20260813201012_SnapshotSyncMultiTerminal`, snapshot lógico backup/restore, idempotencia, venta concurrente de última unidad, devoluciones parciales y concurrentes, aislamiento cross-store, rollback de compra inválida, apertura concurrente de turno, clientes, inventario y fabricación atómica.
 
-La contraseña no se guardó ni se imprimió.
+## Browser E2E
 
-El warning `NU1900` puede aparecer al ejecutar tests con auditoría de vulnerabilidades si NuGet no está accesible; no es un fallo de compilación ni se oculta en el proyecto.
+Se validó contra una base temporal separada: login de `admin@atlas.local`, inventario, cliente, compra, receta, orden de producción, apertura/cierre de turno, venta en efectivo, devolución y auditoría. La consola no reportó errores, no hubo `pageerror` y no hubo respuestas HTTP 4xx/5xx. También se verificó que una ruta protegida redirige al login sin sesión.
 
-## Cobertura disponible
+## Seguridad de la evidencia
 
-- `SaleCalculator`: redondeo comercial, pesables, IVA y descuento acotado.
-- `ScaleFrameParser`: gramos, kilogramos, libras, peso estable y tramas inválidas.
+La contraseña de laboratorio se suministró sólo por variables de proceso; no se guardó ni imprimió. No se ejecutaron operaciones destructivas sobre `atlas_pos`.
 
-## Evidencia pendiente que bloquea READY
+## Límites conocidos
 
-No se probó mutational testing formal, compras/devoluciones/fabricación desde browser, ni un ciclo operativo `mysqldump` → checksum → restore. Tampoco se instaló un paquete Production en una máquina limpia.
+No se ejecutó mutational testing formal, no se instaló un paquete Production en una máquina limpia y no se conectó hardware físico, SDK bancario o PAC real. Esas validaciones permanecen externas.
