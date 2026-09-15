@@ -327,6 +327,17 @@ public sealed class MySqlIntegrationTests(MySqlFixture fixture)
     }
 
     [Fact]
+    public async Task ConcurrentDifferentWorkstationsCanOpenIndependentShifts()
+    {
+        fixture.RequireEnabled();
+        var terminalA=Guid.NewGuid().ToString("N");var terminalB=Guid.NewGuid().ToString("N");
+        var results=await Task.WhenAll(fixture.RunOpenShiftAsync(terminalA),fixture.RunOpenShiftAsync(terminalB));
+        Assert.All(results,x=>Assert.True(x.Success,x.Error));
+        await using var db=fixture.CreateContext();
+        Assert.Equal(2,await db.CashShifts.CountAsync(x=>x.WorkstationId==terminalA||x.WorkstationId==terminalB));
+    }
+
+    [Fact]
     public async Task ManufacturingLastMaterialAllowsOnlyOneConcurrentProduction()
     {
         fixture.RequireEnabled();

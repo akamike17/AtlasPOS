@@ -10,7 +10,7 @@ dotnet test tests\\Integration.MySql\\Integration.MySql.csproj --configuration R
 dotnet publish PuntoDeVentaAtlas.Web.csproj --configuration Release --no-restore --output <TEMP>
 ```
 
-Resultado final: **Unit 38 PASS / 0 FAIL / 0 SKIP**; **MySQL 18 PASS / 0 FAIL / 0 SKIP**; Release **0 errores / 0 advertencias**.
+Resultado final: **Unit 38 PASS / 0 FAIL / 0 SKIP**; **MySQL 19 PASS / 0 FAIL / 0 SKIP**; Release **0 errores / 0 advertencias**.
 
 ## MySQL y seguridad
 
@@ -20,7 +20,7 @@ La frontera `SERVER` sólo se activa para una petición local del host con confi
 
 ## Browser E2E
 
-En una base temporal se validaron health, login administrativo, registro/habilitación de Caja A y B, turnos separados, ventas simultáneas y cierres independientes. Resultado: PASS; 0 errores JS críticos y 0 respuestas HTTP inesperadas durante el flujo.
+En una base temporal se validaron health, login, dos contextos visibles con terminales explícitas, turnos separados, aperturas y ventas simultáneas, cierre independiente y continuidad de Caja B. Resultado: PASS; 0 respuestas 5xx durante el flujo.
 
 ## Production y límites
 

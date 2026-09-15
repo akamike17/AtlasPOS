@@ -13,7 +13,7 @@ La matriz usa evidencia reproducible de esta iteración; las pruebas MySQL y pub
 | Roles y sesiones | PASS | metadata de endpoints + revalidación de claims |
 | Migraciones fresh/upgrade | PASS | bases efímeras |
 | Backup/restore | PASS | SHA/restore y corrupto, truncado, formato incompatible, destino no vacío |
-| Browser E2E multicaixa | PASS | SERVER + Caja A/B simultáneas |
+| Browser E2E multicaixa | PASS | Caja A/B visibles, aperturas/ventas simultáneas y cierres independientes |
 | Manufactura | PASS | atomicidad y última materia prima concurrente |
 | Periféricos software | PASS | contratos, estados, parser y aislamiento por workstation |
 | Production publish/observabilidad | PASS | Production sin demo/migrations, health mínimo, static, restart |
