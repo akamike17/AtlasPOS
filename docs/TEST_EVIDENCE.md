@@ -1,29 +1,27 @@
 # Evidencia de pruebas
 
-## Comandos ejecutados
+## Comandos
 
 ```powershell
-dotnet restore PuntoDeVentaAtlas.Web.slnx -p:NuGetAudit=false --ignore-failed-sources
-dotnet build PuntoDeVentaAtlas.Web.slnx --configuration Release --no-restore
-dotnet test PuntoDeVentaAtlas.Web.slnx --configuration Release --no-build
-dotnet build tests\Integration.MySql\Integration.MySql.csproj --configuration Release --no-restore
-dotnet test tests\Integration.MySql\Integration.MySql.csproj --configuration Release --no-build
+dotnet restore PuntoDeVentaAtlas.Web.slnx --ignore-failed-sources -p:NuGetAudit=false
+dotnet build PuntoDeVentaAtlas.Web.slnx --configuration Release --no-restore -m:1
+dotnet test tests\\PuntoDeVentaAtlas.Web.Tests\\PuntoDeVentaAtlas.Web.Tests.csproj --configuration Release --no-build
+dotnet test tests\\Integration.MySql\\Integration.MySql.csproj --configuration Release --no-build
+dotnet publish PuntoDeVentaAtlas.Web.csproj --configuration Release --no-restore --output <TEMP>
 ```
 
-Resultado: restore y Release correctos; build sin advertencias; pruebas unitarias verdes; MySQL integrado **12/12**.
+Resultado final: **Unit 38 PASS / 0 FAIL / 0 SKIP**; **MySQL 18 PASS / 0 FAIL / 0 SKIP**; Release **0 errores / 0 advertencias**.
 
-## Cobertura MySQL
+## MySQL y seguridad
 
-Las pruebas crean y eliminan bases efímeras con MySQL local, sin tocar `atlas_pos`. Cubren migración fresh, upgrade desde `20260813201012_SnapshotSyncMultiTerminal`, snapshot lógico backup/restore, idempotencia, venta concurrente de última unidad, devoluciones parciales y concurrentes, aislamiento cross-store, rollback de compra inválida, apertura concurrente de turno, clientes, inventario y fabricación atómica.
+Las suites crean bases efímeras y las eliminan. Cubren migración fresh, upgrade desde `20260813201012_SnapshotSyncMultiTerminal`, backup/restore, corrupción/truncado/formato incompatible/destino no vacío, idempotencia, última unidad concurrente, cross-store, rollback, devoluciones, turnos, manufactura, onboarding, workstation spoof/disabled/unknown, sesiones y actor ID.
+
+La frontera `SERVER` sólo se activa para una petición local del host con configuración interna explícita. Un cliente remoto sin header, con header/cookie inválido, literal `SERVER`, GUID desconocido o workstation de otra tienda no obtiene contexto servidor ni acceso POS.
 
 ## Browser E2E
 
-Se validó contra una base temporal separada: login de `admin@atlas.local`, inventario, cliente, compra, receta, orden de producción, apertura/cierre de turno, venta en efectivo, devolución y auditoría. La consola no reportó errores, no hubo `pageerror` y no hubo respuestas HTTP 4xx/5xx. También se verificó que una ruta protegida redirige al login sin sesión.
+En una base temporal se validaron health, login administrativo, registro/habilitación de Caja A y B, turnos separados, ventas simultáneas y cierres independientes. Resultado: PASS; 0 errores JS críticos y 0 respuestas HTTP inesperadas durante el flujo.
 
-## Seguridad de la evidencia
+## Production y límites
 
-La contraseña de laboratorio se suministró sólo por variables de proceso; no se guardó ni imprimió. No se ejecutaron operaciones destructivas sobre `atlas_pos`.
-
-## Límites conocidos
-
-No se ejecutó mutational testing formal, no se instaló un paquete Production en una máquina limpia y no se conectó hardware físico, SDK bancario o PAC real. Esas validaciones permanecen externas.
+El publish temporal arrancó en `Production` con `ApplyMigrations=false` y `DemoMode=false`; pasó startup, login, health, static files y restart. `.keys` persistió dentro del publish temporal y no está versionado. El hardware físico, SDK bancario y PAC no se declaran probados.

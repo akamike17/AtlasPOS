@@ -1,33 +1,31 @@
 # Verificación final de AtlasPOS
 
-Fecha de esta verificación: 2026-09-15. Base revisada: `92c51d4`.
+Fecha: 2026-09-15. Base auditada: `7d8d5b3`.
 
 ## Resultado
 
-AtlasPOS queda **SOFTWARE READY** para el alcance validado. La compatibilidad física de hardware queda **EXTERNAL / NOT PROVEN**: los contratos y estados de fallo están cubiertos, pero no se conectó un modelo físico, SDK bancario ni PAC real.
+**ATLASPOS SOFTWARE READY** para `CENTRAL SERVER + MULTIPLE WORKSTATIONS + CENTRAL MYSQL`. La base real `atlas_pos` no fue reseteada ni mutada destructivamente.
 
-## Implementado y verificado
+La única limitación de alcance es **EXTERNAL / NOT PHYSICALLY PROVEN** para modelos físicos, SDK bancario, PAC y credenciales/proveedores que requieren infraestructura externa.
 
-- Validaciones de entrada y transacciones atómicas para ventas, compras, clientes, inventario, devoluciones y fabricación.
-- Idempotencia de checkout, aislamiento por sucursal y protección contra concurrencia en ventas, devoluciones y apertura de turnos.
-- Manejo explícito de caja sin turno abierto; `/Pos/CurrentShift` ya no responde 500 cuando la caja está cerrada.
-- Migraciones fresh, upgrade desde una migración previa y backup/restore lógico en bases efímeras.
-- Browser E2E de login, inventario, clientes, compras, receta, producción, apertura/cierre de turno, venta, devolución y auditoría.
+## Implementado
 
-## Evidencia
+- Separación confiable entre contexto interno `SERVER` y workstation; omitir, falsificar o invalidar `TerminalId` desde una petición remota no otorga contexto servidor.
+- Onboarding explícito: una caja nueva queda `Enabled=false` hasta habilitación administrativa; se conservan StoreId, TerminalId, nombre y timestamps.
+- Aislamiento por StoreId + UserId + WorkstationId en turnos, ventas y configuración de periféricos.
+- Revalidación de sesión contra usuario, rol, tienda y estado activo; eliminado el fallback de actor a `UserId=1` en periféricos.
+- Concurrencia e idempotencia de checkout, devoluciones, turnos, inventario compartido y manufactura.
+- Production coherente con `RequireHttps`; migraciones automáticas y DemoMode siguen prohibidos en Production.
 
-- `dotnet restore`: PASS.
-- Build Release: PASS, 0 advertencias y 0 errores.
-- Pruebas unitarias: PASS.
-- MySQL integrado: PASS, 12/12; incluye fresh, upgrade, backup/restore, idempotencia, concurrencia, rollback, aislamiento y flujos de devolución/fabricación.
-- Browser E2E: PASS; consola sin errores, sin `pageerror` y sin respuestas HTTP 4xx/5xx.
-- `atlas_pos`: no se reseteó ni se mutó destructivamente.
+## Evidencia ejecutada
 
-## Pendientes explícitos
-
-- Mutational testing formal aún no está incorporado.
-- La instalación Production en una máquina limpia y la prueba física de periféricos requieren infraestructura externa.
+- Release restore/build: 0 errores, 0 advertencias.
+- Unitarias: 38/38 PASS, 0 FAIL, 0 SKIP.
+- MySQL: 18/18 PASS, 0 FAIL, 0 SKIP; incluye fresh, upgrade, backup/restore corrupto y no vacío.
+- Browser E2E multicaixa: PASS; SERVER, onboarding A/B, turnos, ventas simultáneas, cierres independientes y health/static files.
+- Publish Production: PASS en carpeta temporal; startup, login, health, static files, DataProtection persistente y restart.
+- No se declararon como probados periféricos físicos, terminal bancaria ni PAC.
 
 ## Repositorio
 
-El cierre debe quedar en un único commit de esta iteración sobre `codex/atlaspos-hardening`, con working tree limpio y sin merge.
+Cambios preparados para un único commit en `codex/atlaspos-hardening`, sin merge y con working tree limpio después del push.

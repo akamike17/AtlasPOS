@@ -1,23 +1,22 @@
 # Matriz de readiness
 
-La puntuación sólo usa evidencia reproducible. Las pruebas MySQL usan bases efímeras; `atlas_pos` no se reseteó ni recibió mutaciones destructivas.
+La matriz usa evidencia reproducible de esta iteración; las pruebas MySQL y publish usan entornos temporales.
 
-| Área | Peso | Estado | Puntos |
-|---|---:|---|---:|
-| Build/start/config | 5 | PROVEN | 5 |
-| Sale atomicity/idempotency/concurrency | 15 | PROVEN | 15 |
-| Cash shifts/money | 10 | PROVEN | 10 |
-| Inventory/purchases | 10 | PROVEN | 10 |
-| Returns | 8 | PROVEN | 8 |
-| Store isolation/security | 10 | PROVEN | 10 |
-| Auth/roles/workstations | 8 | PARTIAL | 6 |
-| MySQL migrations/upgrade | 7 | PROVEN | 7 |
-| Backup/recovery | 5 | PROVEN | 5 |
-| UI/browser E2E | 8 | PROVEN | 8 |
-| Automated tests | 6 | PARTIAL | 4 |
-| Peripheral software behavior | 3 | PARTIAL | 2 |
-| Manufacturing | 2 | PROVEN | 2 |
-| Docs/installability/observability | 3 | PARTIAL | 2 |
-| **TOTAL** | **100** | **SOFTWARE READY** | **94** |
+| Área | Estado | Evidencia |
+|---|---|---|
+| Build/start/config | PASS | Release build: 0 errores / 0 advertencias |
+| Checkout, idempotencia y concurrencia | PASS | MySQL: retry, última unidad, rollback |
+| Cash shifts multicaixa | PASS | apertura/cierre independiente y carrera |
+| Inventario/compras | PASS | centralizado, cross-store y rollback |
+| Devoluciones | PASS | parcial, límite y concurrencia |
+| Store/workstation isolation | PASS | SERVER spoof, unknown, disabled, cross-store |
+| Roles y sesiones | PASS | metadata de endpoints + revalidación de claims |
+| Migraciones fresh/upgrade | PASS | bases efímeras |
+| Backup/restore | PASS | SHA/restore y corrupto, truncado, formato incompatible, destino no vacío |
+| Browser E2E multicaixa | PASS | SERVER + Caja A/B simultáneas |
+| Manufactura | PASS | atomicidad y última materia prima concurrente |
+| Periféricos software | PASS | contratos, estados, parser y aislamiento por workstation |
+| Production publish/observabilidad | PASS | Production sin demo/migrations, health mínimo, static, restart |
+| Hardware físico/proveedores | EXTERNAL | requiere dispositivo, SDK, PAC o credenciales reales |
 
-La diferencia hasta 100 corresponde a mutational testing formal, matriz completa de roles, validación física de periféricos y ejecución de un paquete Production en una máquina limpia. Esos puntos no se presentan como probados.
+Conclusión: el software interno queda listo para el alcance demostrado; las dependencias físicas permanecen explícitamente externas.

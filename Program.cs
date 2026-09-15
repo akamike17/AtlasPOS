@@ -10,17 +10,19 @@ builder.Logging.ClearProviders();
 builder.Logging.AddConsole();
 var mysqlConnection = builder.Configuration.GetConnectionString("AtlasMySql")
     ?? throw new InvalidOperationException("Falta la conexión AtlasMySql.");
+var requireHttps = builder.Configuration.GetValue<bool>("Atlas:RequireHttps");
 
 // Add services to the container.
 builder.Services.AddControllersWithViews();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<PuntoDeVentaAtlas.Web.Services.ICurrentUserContext,PuntoDeVentaAtlas.Web.Services.CurrentUserContext>();
 builder.Services.AddScoped<PuntoDeVentaAtlas.Web.Services.ICurrentTerminalContext,PuntoDeVentaAtlas.Web.Services.CurrentTerminalContext>();
-builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme).AddCookie(options=>{options.LoginPath="/Auth/Login";options.AccessDeniedPath="/Auth/Denied";options.Cookie.Name="AtlasPOS.Session";options.Cookie.HttpOnly=true;options.Cookie.SameSite=SameSiteMode.Lax;options.Cookie.SecurePolicy=builder.Environment.IsProduction()?CookieSecurePolicy.Always:CookieSecurePolicy.SameAsRequest;options.SlidingExpiration=true;options.ExpireTimeSpan=TimeSpan.FromHours(4);});
-builder.Services.AddAntiforgery(options=>{options.HeaderName="RequestVerificationToken";options.Cookie.Name="AtlasPOS.AntiForgery";options.Cookie.HttpOnly=false;options.Cookie.SameSite=SameSiteMode.Strict;options.Cookie.SecurePolicy=builder.Environment.IsProduction()?CookieSecurePolicy.Always:CookieSecurePolicy.SameAsRequest;});
+builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme).AddCookie(options=>{options.LoginPath="/Auth/Login";options.AccessDeniedPath="/Auth/Denied";options.Cookie.Name="AtlasPOS.Session";options.Cookie.HttpOnly=true;options.Cookie.SameSite=SameSiteMode.Lax;options.Cookie.SecurePolicy=requireHttps?CookieSecurePolicy.Always:CookieSecurePolicy.SameAsRequest;options.SlidingExpiration=true;options.ExpireTimeSpan=TimeSpan.FromHours(4);options.Events.OnValidatePrincipal=async context=>{var validator=context.HttpContext.RequestServices.GetRequiredService<UserSessionValidator>();if(!await validator.IsValidAsync(context.Principal!,context.HttpContext.RequestAborted))context.RejectPrincipal();};});
+builder.Services.AddAntiforgery(options=>{options.HeaderName="RequestVerificationToken";options.Cookie.Name="AtlasPOS.AntiForgery";options.Cookie.HttpOnly=false;options.Cookie.SameSite=SameSiteMode.Strict;options.Cookie.SecurePolicy=requireHttps?CookieSecurePolicy.Always:CookieSecurePolicy.SameAsRequest;});
 builder.Services.AddAuthorization(options=>{options.AddPolicy("ManageInventory",p=>p.RequireRole("Administrator","Manager"));options.AddPolicy("CloseCash",p=>p.RequireRole("Administrator","Manager"));options.AddPolicy("Audit",p=>p.RequireRole("Administrator"));});
 builder.Services.AddScoped<IPasswordHasher<PuntoDeVentaAtlas.Web.Data.UserEntity>,PasswordHasher<PuntoDeVentaAtlas.Web.Data.UserEntity>>();
 builder.Services.AddScoped<PuntoDeVentaAtlas.Web.Services.IAuthenticationService,PuntoDeVentaAtlas.Web.Services.AuthenticationService>();
+builder.Services.AddScoped<UserSessionValidator>();
 builder.Services.AddScoped<PuntoDeVentaAtlas.Web.Services.OperationsService>();
 builder.Services.AddScoped<PuntoDeVentaAtlas.Web.Services.UserManagementService>();
 builder.Services.AddScoped<PuntoDeVentaAtlas.Web.Services.CustomerDashboardPdfService>();

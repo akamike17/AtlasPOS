@@ -1,0 +1,11 @@
+@{Layout=null;}
+<!doctype html>
+<html lang="es">
+<head><meta charset="utf-8"/><meta name="viewport" content="width=device-width"/><title>Registrar caja · Atlas POS</title><link rel="stylesheet" href="~/css/site.css"/></head>
+<body class="login-body"><main class="login-shell">
+<section class="login-brand"><div class="brand"><span class="brand-mark">A</span><span><b>ATLAS</b><small>punto de venta</small></span></div><h1>Conecta esta caja.</h1><p>Registra esta computadora para que un administrador autorice su operación.</p></section>
+<section class="login-panel"><div><span class="eyebrow">ALTA DE CAJA</span><h2>Solicitar autorización</h2><p id="status">Preparando la identidad segura de esta caja…</p><label>Nombre de la caja<input id="name" maxlength="120" value="Caja nueva" /></label><button class="confirm-button" id="register">Solicitar registro</button><p><a href="~/Auth/Login">Volver al acceso</a></p></div></section>
+</main><form id="antiForgeryForm">@Html.AntiForgeryToken()</form>
+<script>
+const key='atlas.terminalId', terminalId=localStorage.getItem(key)||crypto.randomUUID().replaceAll('-','');localStorage.setItem(key,terminalId);document.querySelector('#register').onclick=async()=>{const token=document.querySelector('#antiForgeryForm input').value;const response=await fetch('/Workstations/Register',{method:'POST',headers:{'Content-Type':'application/json','RequestVerificationToken':token,'X-Atlas-Terminal-Id':terminalId},body:JSON.stringify({terminalId,name:document.querySelector('#name').value.trim()||'Caja nueva'})});const body=await response.json().catch(()=>({}));document.querySelector('#status').textContent=body.message|| (response.ok?'Registro completado. Reinicia esta pantalla.':'No fue posible registrar esta caja.');};
+</script></body></html>

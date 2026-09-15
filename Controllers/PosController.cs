@@ -6,9 +6,9 @@ using Microsoft.AspNetCore.Authorization;
 namespace PuntoDeVentaAtlas.Web.Controllers;
 
 [Authorize]
-public sealed class PosController(IMySqlPointOfSaleService pos, IDeviceCatalogService devices, CustomerDashboardPdfService pdf,PeripheralConfigurationService peripherals) : Controller
+public sealed class PosController(IMySqlPointOfSaleService pos, IDeviceCatalogService devices, CustomerDashboardPdfService pdf,PeripheralConfigurationService peripherals,ICurrentTerminalContext terminal) : Controller
 {
-    public async Task<IActionResult> Index(CancellationToken ct) => View(await pos.DashboardAsync(ct));
+    public async Task<IActionResult> Index(CancellationToken ct){ViewData["ServerContext"]=terminal.IsServerContext;return View(await pos.DashboardAsync(ct));}
 
     [HttpPost, ValidateAntiForgeryToken]
     public async Task<IActionResult> Checkout([FromBody] SaleRequest request, CancellationToken ct)

@@ -86,5 +86,5 @@
 <div class="toast" id="toast"></div>
 <form id="antiForgeryForm">@Html.AntiForgeryToken()</form>
 <script>
-window.atlasData = @Html.Raw(JsonSerializer.Serialize(new { products = Model.Products, customers = Model.Customers, recentSales = Model.RecentSales, canOpenDrawer = User.IsInRole("Administrator") || User.IsInRole("Manager") }, jsonOptions));
+window.atlasData = @Html.Raw(JsonSerializer.Serialize(new { products = Model.Products, customers = Model.Customers, recentSales = Model.RecentSales, canOpenDrawer = User.IsInRole("Administrator") || User.IsInRole("Manager"), serverContext = (bool?)ViewData["ServerContext"] == true }, jsonOptions));
 </script>

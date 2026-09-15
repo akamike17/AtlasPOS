@@ -1,9 +1,18 @@
 using System.Data;
+using System.IO.Compression;
+using System.Net;
+using System.Security.Claims;
+using System.Text;
+using System.Text.Json;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 using MySqlConnector;
+using Microsoft.Extensions.Configuration;
+using PuntoDeVentaAtlas.Web.Controllers;
 using PuntoDeVentaAtlas.Web.Data;
 using PuntoDeVentaAtlas.Web.Models;
 using PuntoDeVentaAtlas.Web.Services;
@@ -256,6 +265,96 @@ public sealed class MySqlIntegrationTests(MySqlFixture fixture)
         Assert.Equal(1m, await final.Products.Where(x => x.Id == raw.Id).Select(x => x.Stock).SingleAsync());
         Assert.Equal(2m, await final.Products.Where(x => x.Id == finished.Id).Select(x => x.Stock).SingleAsync());
     }
+
+    [Fact]
+    public async Task MultiWorkstationGuardRejectsSpoofedAndUnapprovedTerminals()
+    {
+        fixture.RequireEnabled();
+        var terminalA=Guid.NewGuid().ToString("N");var terminalB=Guid.NewGuid().ToString("N");var disabled=Guid.NewGuid().ToString("N");var otherStore=Guid.NewGuid().ToString("N");
+        await using(var db=fixture.CreateContext())
+        {
+            db.Workstations.AddRange(
+                new WorkstationEntity{StoreId=1,TerminalId=terminalA,Name="Caja A",Enabled=true},
+                new WorkstationEntity{StoreId=1,TerminalId=terminalB,Name="Caja B",Enabled=true},
+                new WorkstationEntity{StoreId=1,TerminalId=disabled,Name="Caja C",Enabled=false},
+                new WorkstationEntity{StoreId=2,TerminalId=otherStore,Name="Otra tienda",Enabled=true});
+            await db.SaveChangesAsync();
+        }
+
+        var server=await fixture.RunGuardAsync(1,null,null);
+        Assert.True(server.NextCalled);
+        Assert.Equal(200,server.StatusCode);
+        Assert.True((await fixture.RunGuardAsync(1,terminalA,IPAddress.Parse("192.0.2.10"))).NextCalled);
+        Assert.True((await fixture.RunGuardAsync(1,terminalB,IPAddress.Parse("192.0.2.11"))).NextCalled);
+        Assert.Equal(403,(await fixture.RunGuardAsync(1,disabled,IPAddress.Parse("192.0.2.12"))).StatusCode);
+        Assert.Equal(403,(await fixture.RunGuardAsync(1,Guid.NewGuid().ToString("N"),IPAddress.Parse("192.0.2.13"))).StatusCode);
+        Assert.Equal(400,(await fixture.RunGuardAsync(1,"SERVER",IPAddress.Parse("192.0.2.14"))).StatusCode);
+        Assert.Equal(400,(await fixture.RunGuardAsync(1,"bad-terminal",IPAddress.Parse("192.0.2.15"))).StatusCode);
+        Assert.Equal(403,(await fixture.RunGuardAsync(1,null,IPAddress.Parse("192.0.2.16"))).StatusCode);
+        Assert.Equal(403,(await fixture.RunGuardAsync(1,otherStore,IPAddress.Parse("192.0.2.17"))).StatusCode);
+    }
+
+    [Fact]
+    public async Task WorkstationRegistrationIsPendingUntilAdministratorEnablesIt()
+    {
+        fixture.RequireEnabled();
+        var id=Guid.NewGuid().ToString("N");
+        await using var db=fixture.CreateContext();
+        var http=new DefaultHttpContext();http.User=fixture.AdminPrincipal();http.Request.Headers["X-Atlas-Terminal-Id"]=id;
+        var terminal=new CurrentTerminalContext(new HttpContextAccessor{HttpContext=http},fixture.ServerConfiguration());
+        var controller=new WorkstationsController(db,fixture.CreateUserContext(1),terminal){ControllerContext=new ControllerContext{HttpContext=http}};
+        var pending=await controller.Register(new RegisterWorkstationRequest{TerminalId=id,Name="Caja pendiente"},default);
+        Assert.IsType<ObjectResult>(pending);Assert.Equal(202,((ObjectResult)pending).StatusCode);
+        Assert.False(await db.Workstations.Where(x=>x.StoreId==1&&x.TerminalId==id).Select(x=>x.Enabled).SingleAsync());
+
+        var enabled=await controller.SetEnabled(id,true,default);
+        Assert.Equal(200,((ObjectResult)enabled).StatusCode);
+        var guard=await fixture.RunGuardAsync(1,id,IPAddress.Parse("192.0.2.20"));
+        Assert.True(guard.NextCalled);
+    }
+
+    [Fact]
+    public async Task IndependentShiftsUseTheirOwnWorkstationAndCloseSeparately()
+    {
+        fixture.RequireEnabled();
+        var productId=await fixture.AddProductAsync($"TEST-MULTI-{Guid.NewGuid():N}",2);var terminalA=Guid.NewGuid().ToString("N");var terminalB=Guid.NewGuid().ToString("N");
+        Assert.True((await fixture.RunOpenShiftAsync(terminalA)).Success);Assert.True((await fixture.RunOpenShiftAsync(terminalB)).Success);
+        var saleA=await fixture.RunCheckoutAsync(fixture.Sale($"multi-a-{Guid.NewGuid():N}",productId,1,20),terminalA);var saleB=await fixture.RunCheckoutAsync(fixture.Sale($"multi-b-{Guid.NewGuid():N}",productId,1,20),terminalB);
+        Assert.True(saleA.Success,saleA.Error);Assert.True(saleB.Success,saleB.Error);
+        var closeA=await fixture.CloseShiftAsync(terminalA);var closeB=await fixture.CloseShiftAsync(terminalB);
+        Assert.Equal("closed",closeA.Status);Assert.Equal("closed",closeB.Status);
+        await using var db=fixture.CreateContext();var shifts=await db.Sales.Where(x=>x.Folio==saleA.Folio||x.Folio==saleB.Folio).Select(x=>new{x.Folio,x.ShiftId,x.WorkstationId}).ToListAsync();Assert.Equal(2,shifts.Select(x=>x.ShiftId).Distinct().Count());Assert.Contains(shifts,x=>x.WorkstationId==terminalA);Assert.Contains(shifts,x=>x.WorkstationId==terminalB);
+    }
+
+    [Fact]
+    public async Task ManufacturingLastMaterialAllowsOnlyOneConcurrentProduction()
+    {
+        fixture.RequireEnabled();
+        await using var db=fixture.CreateContext();var raw=new ProductEntity{StoreId=1,Sku=$"RAW-RACE-{Guid.NewGuid():N}",Name="Material de carrera",Stock=1,Active=true};var finished=new ProductEntity{StoreId=1,Sku=$"FIN-RACE-{Guid.NewGuid():N}",Name="Producto de carrera",Stock=0,Active=true};db.Products.AddRange(raw,finished);await db.SaveChangesAsync();var recipe=await fixture.CreateManufacturingService(db,1).SaveRecipeAsync(new SaveRecipeRequest{ProductId=(int)finished.Id,OutputQuantity=1,Components=[new(){ProductId=(int)raw.Id,Quantity=1}]},default);
+        var results=await Task.WhenAll(fixture.RunProduceAsync(recipe.Id),fixture.RunProduceAsync(recipe.Id));
+        Assert.Equal(1,results.Count(x=>x.Success));
+        await using var after=fixture.CreateContext();Assert.Equal(0m,await after.Products.Where(x=>x.Id==raw.Id).Select(x=>x.Stock).SingleAsync());Assert.Equal(1m,await after.Products.Where(x=>x.Id==finished.Id).Select(x=>x.Stock).SingleAsync());Assert.Equal(1,await after.ProductionOrders.CountAsync(x=>x.RecipeId==recipe.Id));
+    }
+
+    [Fact]
+    public async Task SessionClaimsAreRejectedAfterRoleOrAccountChanges()
+    {
+        fixture.RequireEnabled();await using var db=fixture.CreateContext();var validator=new UserSessionValidator(db);var principal=fixture.AdminPrincipal("Administrator");Assert.True(await validator.IsValidAsync(principal,default));
+        var user=await db.Users.SingleAsync(x=>x.Id==1);user.Role="Cashier";await db.SaveChangesAsync();Assert.False(await validator.IsValidAsync(principal,default));
+        user.Active=false;await db.SaveChangesAsync();Assert.False(await validator.IsValidAsync(principal,default));
+    }
+
+    [Fact]
+    public async Task BackupRestoreRejectsCorruptIncompatibleAndNonEmptyDestinations()
+    {
+        fixture.RequireEnabled();await using var db=fixture.CreateContext();var operations=new OperationsService(db);var backup=await operations.CreateBackupAsync(default);Assert.NotEmpty(backup);
+        await Assert.ThrowsAnyAsync<Exception>(()=>operations.RestoreIntoEmptyDatabaseAsync(new MemoryStream([1,2,3,4]),default));
+        await Assert.ThrowsAnyAsync<Exception>(()=>operations.RestoreIntoEmptyDatabaseAsync(new MemoryStream(backup[..(backup.Length/2)]),default));
+        var incompatible=Gzip("{\"Metadata\":{\"Format\":\"other\",\"CreatedAt\":\"2026-01-01T00:00:00Z\",\"Database\":\"mysql\"}}");await Assert.ThrowsAsync<InvalidOperationException>(()=>operations.RestoreIntoEmptyDatabaseAsync(new MemoryStream(incompatible),default));
+        await Assert.ThrowsAsync<InvalidOperationException>(()=>operations.RestoreIntoEmptyDatabaseAsync(new MemoryStream(backup),default));
+    }
+
+    private static byte[] Gzip(string json){using var output=new MemoryStream();using(var gzip=new GZipStream(output,CompressionLevel.Optimal,true)){gzip.Write(Encoding.UTF8.GetBytes(json));}return output.ToArray();}
 }
 
 public sealed class MySqlFixture : IAsyncLifetime
@@ -314,6 +413,25 @@ public sealed class MySqlFixture : IAsyncLifetime
 
     public ManufacturingService CreateManufacturingService(AtlasDbContext db, long storeId)
         => new(db, new TestUserContext(storeId));
+
+    public ICurrentUserContext CreateUserContext(long storeId)=>new TestUserContext(storeId);
+    public IConfiguration ServerConfiguration()=>new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string,string?>{{"Atlas:ServerContext","true"}}).Build();
+    public ClaimsPrincipal AdminPrincipal(string role="Administrator")=>new(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier,"1"),new Claim("store_id","1"),new Claim(ClaimTypes.Role,role)],"test"));
+
+    public async Task<GuardAttempt> RunGuardAsync(long storeId,string? terminalId,IPAddress? remoteAddress)
+    {
+        await using var db=CreateContext();var http=new DefaultHttpContext{User=AdminPrincipal()};http.Request.Path="/Pos/Devices";http.Connection.RemoteIpAddress=remoteAddress;if(terminalId is not null)http.Request.Headers["X-Atlas-Terminal-Id"]=terminalId;var terminal=new CurrentTerminalContext(new HttpContextAccessor{HttpContext=http},ServerConfiguration());var nextCalled=false;await new WorkstationGuardMiddleware(_=>{nextCalled=true;return Task.CompletedTask;}).InvokeAsync(http,db,terminal,CreateUserContext(storeId));return new(http.Response.StatusCode,nextCalled);
+    }
+
+    public async Task<ProductionAttempt> RunProduceAsync(long recipeId)
+    {
+        await using var db=CreateContext();try{await CreateManufacturingService(db,1).ProduceAsync(new ProduceRequest{RecipeId=recipeId,Batches=1},default);return new(true,null);}catch(Exception ex){return new(false,ex.Message);}
+    }
+
+    public async Task<CashShiftSummary> CloseShiftAsync(string terminalId)
+    {
+        await using var db=CreateContext();var service=CreateService(db,1,terminalId);var current=await service.CurrentShiftAsync(default);return await service.CloseShiftAsync(current.ExpectedAmount,default);
+    }
 
     public async Task<CheckoutAttempt> RunCheckoutAsync(SaleRequest request, string terminalId)
     {
@@ -450,6 +568,8 @@ public sealed class MySqlFixture : IAsyncLifetime
     public sealed record CheckoutAttempt(bool Success, string? Folio, long LineId, string? Error);
     public sealed record ReturnAttempt(bool Success, string? Folio, string? Error);
     public sealed record OpenShiftAttempt(bool Success, string? Error);
+    public sealed record ProductionAttempt(bool Success, string? Error);
+    public sealed record GuardAttempt(int StatusCode, bool NextCalled);
 
     private sealed class TestUserContext(long storeId) : ICurrentUserContext
     {
@@ -462,5 +582,8 @@ public sealed class MySqlFixture : IAsyncLifetime
     private sealed class TestTerminalContext(string terminalId) : ICurrentTerminalContext
     {
         public string TerminalId => terminalId;
+        public bool IsServerContext => terminalId == "SERVER";
+        public bool HasIdentity => true;
+        public bool HasValidIdentity => true;
     }
 }

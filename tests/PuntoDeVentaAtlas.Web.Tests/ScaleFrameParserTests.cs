@@ -17,5 +17,14 @@ public sealed class ScaleFrameParserTests
     [InlineData("")]
     [InlineData("OVERLOAD")]
     [InlineData("ERROR\r")]
+    [InlineData("-1.000 kg\r")]
+    [InlineData("ruido sin peso\r")]
     public void RejectsFramesWithoutWeight(string frame)=>Assert.False(ScaleFrameParser.TryParse(frame,out _));
+
+    [Fact]
+    public void AcceptsZeroAsAValidPhysicalScaleReading()
+    {
+        Assert.True(ScaleFrameParser.TryParse("0.000 kg\r", out var kilograms));
+        Assert.Equal(0m, kilograms);
+    }
 }
