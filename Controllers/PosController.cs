@@ -6,7 +6,7 @@ using Microsoft.AspNetCore.Authorization;
 namespace PuntoDeVentaAtlas.Web.Controllers;
 
 [Authorize]
-public sealed class PosController(IMySqlPointOfSaleService pos, IPointOfSaleService devices, CustomerDashboardPdfService pdf,PeripheralConfigurationService peripherals) : Controller
+public sealed class PosController(IMySqlPointOfSaleService pos, IDeviceCatalogService devices, CustomerDashboardPdfService pdf,PeripheralConfigurationService peripherals) : Controller
 {
     public async Task<IActionResult> Index(CancellationToken ct) => View(await pos.DashboardAsync(ct));
 

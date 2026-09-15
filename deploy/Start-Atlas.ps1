@@ -27,7 +27,9 @@ $secureAdminPassword = Read-Host 'Contraseña inicial de admin@atlas.local (mín
 $adminPassword = [System.Net.NetworkCredential]::new('', $secureAdminPassword).Password
 if ($adminPassword.Length -lt 10) { throw 'La contraseña inicial debe tener al menos 10 caracteres.' }
 
-$env:ASPNETCORE_ENVIRONMENT = 'Production'
+# Este paquete es un entorno Lab autocontenido. Production usa Upgrade-Atlas.ps1
+# y arranca con Atlas:ApplyMigrations=false.
+$env:ASPNETCORE_ENVIRONMENT = 'Lab'
 $env:ASPNETCORE_URLS = 'http://127.0.0.1:5099'
 $env:ConnectionStrings__AtlasMySql = "Server=127.0.0.1;Port=3306;Database=atlas_pos;User=atlas_app;Password=$($settings.ATLAS_DB_PASSWORD);Allow User Variables=true;"
 $env:Atlas__InitialAdminPassword = $adminPassword

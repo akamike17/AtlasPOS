@@ -25,6 +25,9 @@ public sealed class AtlasDbContext(DbContextOptions<AtlasDbContext> options) : D
         b.Entity<CashShiftEntity>().HasMany(x=>x.Movements).WithOne().HasForeignKey(x=>x.ShiftId).OnDelete(DeleteBehavior.Cascade);
         b.Entity<PeripheralConfigurationEntity>().HasIndex(x=>new{x.StoreId,x.WorkstationId,x.Key}).IsUnique();
         b.Entity<WorkstationEntity>().HasIndex(x=>new{x.StoreId,x.TerminalId}).IsUnique();
+        b.Entity<CashShiftEntity>().Property(x=>x.Status).HasMaxLength(255);
+        b.Entity<CashShiftEntity>().Property<string?>("OpenShiftKey").HasColumnName("open_shift_key").HasMaxLength(1).HasComputedColumnSql("CASE WHEN status = 'open' THEN '1' ELSE NULL END", stored:true);
+        b.Entity<CashShiftEntity>().HasIndex("StoreId","UserId","WorkstationId","OpenShiftKey").IsUnique();
         b.Entity<WorkstationEntity>().Property(x=>x.TerminalId).HasMaxLength(32); b.Entity<PeripheralConfigurationEntity>().Property(x=>x.WorkstationId).HasMaxLength(32); b.Entity<SaleEntity>().Property(x=>x.WorkstationId).HasMaxLength(32); b.Entity<CashShiftEntity>().Property(x=>x.WorkstationId).HasMaxLength(32);
         b.Entity<RecipeEntity>().HasMany(x=>x.Components).WithOne().HasForeignKey(x=>x.RecipeId).OnDelete(DeleteBehavior.Cascade);
         b.Entity<SaleEntity>().HasMany(x=>x.Lines).WithOne().HasForeignKey(x=>x.SaleId).OnDelete(DeleteBehavior.Cascade);
@@ -70,19 +73,21 @@ public sealed class ProductionOrderEntity{public long Id{get;set;}public long St
 
 public static class AtlasDatabaseSeeder
 {
-    public static async Task SeedAsync(AtlasDbContext db)
+    public static Task ApplyMigrationsAsync(AtlasDbContext db, CancellationToken ct = default)
+        => db.Database.MigrateAsync(ct);
+
+    public static async Task SeedDemoAsync(AtlasDbContext db, CancellationToken ct = default)
     {
-        await db.Database.MigrateAsync();
-        if(await db.Stores.AnyAsync()){await EnsureDemoCustomersAsync(db);return;}
+        if(await db.Stores.AnyAsync(ct)){await EnsureDemoCustomersAsync(db, ct);return;}
         db.Stores.Add(new(){Id=1,Name="Sucursal Centro"}); db.Users.Add(new(){Id=1,StoreId=1,Name="Administrador",Email="admin@atlas.local",PasswordHash="CONFIGURAR_IDENTITY",Role="Administrator"});
         var names=new[]{"Abarrotes","Lácteos","Frutas y verduras","Panadería","Bebidas","Limpieza"}; for(var i=0;i<names.Length;i++)db.Categories.Add(new(){Id=i+1,StoreId=1,Name=names[i]});
         db.Products.AddRange(new ProductEntity{Id=1,StoreId=1,CategoryId=1,Sku="CAF-001",Barcode="7501001000011",Name="Café artesanal 500 g",Price=149,Cost=90,TaxRate=.16m,Stock=24,MinimumStock=5},new ProductEntity{Id=2,StoreId=1,CategoryId=2,Sku="LEC-001",Barcode="7501001000028",Name="Leche entera 1 L",Price=29.5m,Cost=21,Stock=48,MinimumStock=10},new ProductEntity{Id=3,StoreId=1,CategoryId=3,Sku="MAN-KG",Barcode="2000000001012",Name="Manzana Gala",Unit="kg",IsWeighted=true,Price=46.9m,Cost=28,Stock=18.75m,MinimumStock=5},new ProductEntity{Id=4,StoreId=1,CategoryId=4,Sku="PAN-001",Barcode="7501001000042",Name="Pan integral",Price=54,Cost=32,Stock=12,MinimumStock=4},new ProductEntity{Id=5,StoreId=1,CategoryId=5,Sku="REF-600",Barcode="7501001000059",Name="Refresco 600 ml",Price=22,Cost=14,TaxRate=.16m,Stock=6,MinimumStock=8});
-        db.Customers.AddRange(new(){Id=1,StoreId=1,Name="Público general",Rfc="XAXX010101000"},new(){Id=2,StoreId=1,Name="Mariana López",Rfc="LOPM850312AB2",Email="mariana@correo.mx",Phone="55 1234 5678"}); db.Suppliers.Add(new(){Id=1,StoreId=1,Name="Proveedor General",Email="ventas@proveedor.local"}); db.CashShifts.Add(new(){Id=1,StoreId=1,UserId=1,OpenedAt=DateTime.Now,OpeningAmount=0,Status="open"}); await db.SaveChangesAsync(); await EnsureDemoCustomersAsync(db);
+        db.Customers.AddRange(new(){Id=1,StoreId=1,Name="Público general",Rfc="XAXX010101000"},new(){Id=2,StoreId=1,Name="Mariana López",Rfc="LOPM850312AB2",Email="mariana@correo.mx",Phone="55 1234 5678"}); db.Suppliers.Add(new(){Id=1,StoreId=1,Name="Proveedor General",Email="ventas@proveedor.local"}); db.CashShifts.Add(new(){Id=1,StoreId=1,UserId=1,OpenedAt=DateTime.Now,OpeningAmount=0,Status="open"}); await db.SaveChangesAsync(ct); await EnsureDemoCustomersAsync(db, ct);
     }
 
-    private static async Task EnsureDemoCustomersAsync(AtlasDbContext db)
+    private static async Task EnsureDemoCustomersAsync(AtlasDbContext db, CancellationToken ct)
     {
-        var current=await db.Customers.CountAsync(x=>x.StoreId==1); if(current>=100)return;
+        var current=await db.Customers.CountAsync(x=>x.StoreId==1, ct); if(current>=100)return;
         var first=new[]{"Ana","Luis","María","Carlos","Sofía","Jorge","Diana","Miguel","Laura","Fernando"};
         var last=new[]{"García","Hernández","Martínez","López","González","Pérez","Ramírez","Sánchez","Flores","Torres"};
         for(var i=current;i<100;i++)
@@ -90,6 +95,6 @@ public static class AtlasDatabaseSeeder
             var n=i+1; var fiscal=n%3!=0; var name=$"{first[i%first.Length]} {last[(i/first.Length)%last.Length]} {n:000}";
             db.Customers.Add(new(){StoreId=1,Name=name,Rfc=fiscal?$"ATL{(800101+n):000000}A{n%10}B":null,LegalName=fiscal?name.ToUpperInvariant():null,FiscalRegime=fiscal?"612":null,FiscalZip=fiscal?$"{60000+n:00000}":null,CfdiUse=fiscal?"G03":null,Email=n%4==0?null:$"cliente{n:000}@atlas.demo",Phone=n%5==0?null:$"55 10{n:00} {n:0000}"});
         }
-        await db.SaveChangesAsync();
+        await db.SaveChangesAsync(ct);
     }
 }
