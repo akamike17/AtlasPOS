@@ -1,0 +1,22 @@
+services:
+  mysql:
+    image: mysql:8.4
+    container_name: atlas-pos-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: atlas_pos
+      MYSQL_USER: atlas_app
+      MYSQL_PASSWORD: ${ATLAS_DB_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${ATLAS_DB_ROOT_PASSWORD}
+    ports:
+      - "127.0.0.1:3306:3306"
+    volumes:
+      - atlas_mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+volumes:
+  atlas_mysql_data:

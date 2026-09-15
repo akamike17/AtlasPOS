@@ -1,0 +1,4 @@
+{
+  "Agent": { "Urls": "http://0.0.0.0:17420", "Token": "CONFIGURAR_TOKEN_UNICO_DE_ESTA_CAJA" },
+  "Logging": { "LogLevel": { "Default": "Information", "Microsoft.AspNetCore": "Warning" } }
+}

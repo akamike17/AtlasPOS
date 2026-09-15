@@ -1,0 +1,15 @@
+@model LoginViewModel
+@{Layout=null;}
+<!doctype html>
+<html lang="es">
+<head><meta charset="utf-8"/><meta name="viewport" content="width=device-width"/><title>Acceso · Atlas POS</title><link rel="stylesheet" href="~/css/site.css"/></head>
+<body class="login-body"><main class="login-shell">
+<section class="login-brand"><div class="brand"><span class="brand-mark">A</span><span><b>ATLAS</b><small>punto de venta</small></span></div><h1>Tu tienda,<br/>bajo control.</h1><p>Ventas, inventario y caja trabajando juntos en tiempo real.</p><div class="login-status"><span class="online-dot"></span> MySQL conectado · Operación segura</div></section>
+<section class="login-panel"><form method="post" asp-route-returnUrl="@ViewBag.ReturnUrl"><span class="eyebrow">BIENVENIDO</span><h2>Inicia sesión</h2><p>Accede con tu cuenta de Atlas POS.</p>
+@if(!string.IsNullOrEmpty(Model.Error)){<div class="login-error">@Model.Error</div>}
+<label>Correo electrónico<input asp-for="Email" autocomplete="username" autofocus/></label><span asp-validation-for="Email"></span>
+<label>Contraseña<input asp-for="Password" autocomplete="current-password"/></label><span asp-validation-for="Password"></span>
+<label class="remember"><input asp-for="RememberMe"/> Mantener sesión iniciada</label>
+<button class="confirm-button" type="submit">Entrar al sistema</button>@Html.AntiForgeryToken()
+<a href="~/Client/Setup">¿Esta PC no tiene Atlas Agent?</a>
+</form></section></main></body></html>

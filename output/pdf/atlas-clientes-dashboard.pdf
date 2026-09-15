@@ -1,0 +1,65 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 5 0 R /F2 6 0 R >> >> /Contents 4 0 R >>
+endobj
+4 0 obj
+<< /Length 1759 >>
+stream
+0.08 0.12 0.20 rg 0 730 612 62 re f
+BT /F2 20 Tf 1 1 1 rg 42 762 Td (ATLAS POS - DASHBOARD DE CLIENTES) Tj ET
+BT /F1 9 Tf 0.82 0.87 0.94 rg 42 738 Td (Generado: 13/08/2026 11:39) Tj ET
+BT /F2 12 Tf 0.08 0.12 0.20 rg 42 690 Td (RESUMEN) Tj ET
+0.96 0.97 0.99 rg 42 620 120 58 re f
+BT /F1 9 Tf 0.38 0.43 0.51 rg 54 655 Td (Clientes) Tj ET
+BT /F2 18 Tf 0.08 0.12 0.20 rg 54 633 Td (100) Tj ET
+0.96 0.97 0.99 rg 174 620 120 58 re f
+BT /F1 9 Tf 0.38 0.43 0.51 rg 186 655 Td (Con RFC) Tj ET
+BT /F2 18 Tf 0.08 0.12 0.20 rg 186 633 Td (67) Tj ET
+0.96 0.97 0.99 rg 306 620 120 58 re f
+BT /F1 9 Tf 0.38 0.43 0.51 rg 318 655 Td (Con correo) Tj ET
+BT /F2 18 Tf 0.08 0.12 0.20 rg 318 633 Td (74) Tj ET
+0.96 0.97 0.99 rg 438 620 120 58 re f
+BT /F1 9 Tf 0.38 0.43 0.51 rg 450 655 Td (Listos CFDI) Tj ET
+BT /F2 18 Tf 0.08 0.12 0.20 rg 450 633 Td (65) Tj ET
+BT /F2 12 Tf 0.08 0.12 0.20 rg 42 580 Td (CALIDAD DEL DIRECTORIO) Tj ET
+BT /F1 10 Tf 0.08 0.12 0.20 rg 42 555 Td (Listos para facturar: 65 \(65.0%\)) Tj ET
+0.90 0.92 0.95 rg 42 538 500 12 re f
+0.16 0.40 0.87 rg 42 538 325 12 re f
+BT /F1 10 Tf 0.08 0.12 0.20 rg 42 493 Td (Con RFC: 67 \(67.0%\)) Tj ET
+0.90 0.92 0.95 rg 42 476 500 12 re f
+0.16 0.40 0.87 rg 42 476 335 12 re f
+BT /F1 10 Tf 0.08 0.12 0.20 rg 42 431 Td (Con correo: 74 \(74.0%\)) Tj ET
+0.90 0.92 0.95 rg 42 414 500 12 re f
+0.16 0.40 0.87 rg 42 414 370 12 re f
+BT /F1 10 Tf 0.08 0.12 0.20 rg 42 369 Td (Con telefono: 79 \(79.0%\)) Tj ET
+0.90 0.92 0.95 rg 42 352 500 12 re f
+0.16 0.40 0.87 rg 42 352 395 12 re f
+BT /F1 10 Tf 0.35 0.40 0.48 rg 42 190 Td (Criterio fiscal: RFC, razon social, regimen, codigo postal y uso CFDI completos.) Tj ET
+BT /F1 9 Tf 0.45 0.50 0.58 rg 42 54 Td (Atlas POS | Reporte operativo interno) Tj ET
+endstream
+endobj
+5 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+6 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>
+endobj
+xref
+0 7
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+0000000251 00000 n 
+0000002061 00000 n 
+0000002131 00000 n 
+trailer << /Size 7 /Root 1 0 R >>
+startxref
+2206
+%%EOF

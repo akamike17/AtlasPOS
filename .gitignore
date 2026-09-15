@@ -1,0 +1,11 @@
+bin/
+obj/
+.vs/
+.keys/
+*.user
+*.log
+.run-*
+.ef-*
+release/
+deploy/.env
+wwwroot/downloads/AtlasPeripheralAgent/
