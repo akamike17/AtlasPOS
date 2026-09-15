@@ -1,3 +1,4 @@
 <Solution>
   <Project Path="PuntoDeVentaAtlas.Web.csproj" />
+  <Project Path="tests\PuntoDeVentaAtlas.Web.Tests\PuntoDeVentaAtlas.Web.Tests.csproj" />
 </Solution>

@@ -6,9 +6,9 @@ using Microsoft.AspNetCore.Authorization;
 namespace PuntoDeVentaAtlas.Web.Controllers;
 
 [Authorize]
-public sealed class PosController(IMySqlPointOfSaleService pos, IPointOfSaleService devices, CustomerDashboardPdfService pdf,PeripheralConfigurationService peripherals) : Controller
+public sealed class PosController(IMySqlPointOfSaleService pos, IDeviceCatalogService devices, CustomerDashboardPdfService pdf,PeripheralConfigurationService peripherals,ICurrentTerminalContext terminal) : Controller
 {
-    public async Task<IActionResult> Index(CancellationToken ct) => View(await pos.DashboardAsync(ct));
+    public async Task<IActionResult> Index(CancellationToken ct){ViewData["ServerContext"]=terminal.IsServerContext;return View(await pos.DashboardAsync(ct));}
 
     [HttpPost, ValidateAntiForgeryToken]
     public async Task<IActionResult> Checkout([FromBody] SaleRequest request, CancellationToken ct)
@@ -40,7 +40,14 @@ public sealed class PosController(IMySqlPointOfSaleService pos, IPointOfSaleServ
     [HttpGet] public async Task<IActionResult> CustomerDashboardPdf(CancellationToken ct) => File(pdf.Create(await pos.CustomerDashboardAsync(ct)), "application/pdf", $"atlas-clientes-{DateTime.Today:yyyy-MM-dd}.pdf");
     [HttpGet] public async Task<IActionResult> Suppliers(CancellationToken ct) => Ok(await pos.SuppliersAsync(ct));
     [HttpGet] public async Task<IActionResult> Purchases(CancellationToken ct) => Ok(await pos.PurchasesAsync(ct));
-    [HttpGet] public async Task<IActionResult> CurrentShift(CancellationToken ct) => Ok(await pos.CurrentShiftAsync(ct));
+    [HttpGet] public async Task<IActionResult> CurrentShift(CancellationToken ct)
+    {
+        try { return Ok(await pos.CurrentShiftAsync(ct)); }
+        catch (InvalidOperationException)
+        {
+            return Ok(new CashShiftSummary(0, DateTime.Today, null, 0, 0, 0, 0, 0, "closed"));
+        }
+    }
     [HttpPost, ValidateAntiForgeryToken] public async Task<IActionResult> OpenShift([FromBody] OpenShiftRequest request,CancellationToken ct){try{return Ok(await pos.OpenShiftAsync(request.OpeningAmount,ct));}catch(InvalidOperationException ex){return BadRequest(new{message=ex.Message});}}
     [HttpPost, ValidateAntiForgeryToken] public async Task<IActionResult> CashMovement([FromBody] CashMovementRequest request,CancellationToken ct){if(!ModelState.IsValid)return ValidationProblem(ModelState);try{return Ok(await pos.AddCashMovementAsync(request,ct));}catch(InvalidOperationException ex){return BadRequest(new{message=ex.Message});}}
     [Authorize(Policy="CloseCash"), HttpPost, ValidateAntiForgeryToken] public async Task<IActionResult> CloseShift([FromBody] decimal countedAmount, CancellationToken ct) => Ok(await pos.CloseShiftAsync(countedAmount, ct));
